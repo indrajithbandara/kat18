@@ -1,3 +1,5 @@
+import re
+
 import discord
 import discord.ext.commands as commands
 
@@ -8,6 +10,11 @@ class Admin:
     """
     Administrative tasks.
     """
+    @staticmethod
+    async def __local_check(ctx):
+        return (await ctx.bot.is_owner(ctx.author)
+                or ctx.author.id in ctx.bot.commanders)
+
     @util.group(name='list', brief='Lists various elements.')
     async def list_group(self, ctx):
         pass
@@ -79,7 +86,8 @@ class Admin:
     @list_group.command(
         name='perms',
         aliases=['perm', 'permission', 'permissions'],
-        brief='Lists the permissions for this guild that I am granted.'
+        brief='Lists the permissions for this guild that I am granted.',
+
     )
     async def list_permissions(self, ctx):
         """Lists the current permissions the bot has in the current guild."""
@@ -92,14 +100,20 @@ class Admin:
         falsey_perms = '\n'.join(map(str, falsey_perms))
 
         embed = discord.Embed(
-            title=f'Permissions in {ctx.guild} for {ctx.bot.name}',
+            title=f'My permissions in {ctx.guild}',
             color=0xFF00FF
         )
 
         embed.set_thumbnail(url=ctx.guild.icon_url)
 
-        embed.add_field(name='Permissions granted', value=truthy_perms)
-        embed.add_field(name='Permissions denied', value=falsey_perms)
+        embed.add_field(
+            name='Permissions granted',
+            value=truthy_perms if truthy_perms else 'None'
+        )
+        embed.add_field(
+            name='Permissions denied',
+            value=falsey_perms if falsey_perms else 'None'
+        )
 
         await ctx.send(embed=embed)
 
@@ -110,11 +124,145 @@ class Admin:
         brief='Lists the emojis that I will currently react with.'
     )
     async def list_emojis(self, ctx):
-        pass
+        embed = discord.Embed(
+            title=f'My super dank list of emojis to shitpost with',
+            color=0xFFAACC
+        )
+
+        embed.set_thumbnail(url=ctx.bot.user.avatar_url)
+        emojis = ctx.bot.loaded_emojis
+        embed.description = '\n'.join(
+            map(lambda e: f'{str(e)} {e.name} {e.id}', emojis)
+        )
+
+        await ctx.send(embed=embed)
+
+    @list_group.command(
+        name='trigger',
+        aliases=['triggers', 'word', 'words', 'regex', 'regexes', 'regexs',
+                 'pattern', 'patterns', 'phrase', 'phrases'],
+        brief='Lists all phrases/regular expressions I understand.'
+    )
+    async def list_phrases(self, ctx):
+        # noinspection PyProtectedMember
+        patterns = []
+
+        for pattern in ctx.bot.patterns:
+            # Determines if the regex was probably added as a word.
+            match = re.match(r'^\\b\(([^)]+)\)\\b$', pattern.pattern)
+            if match:
+                patterns.append(match.group(1))
+            else:
+                patterns.append(f'`re/{pattern.pattern}/`')
+
+        embed = discord.Embed(
+            title=f'Things I react to',
+            description='\n'.join(
+                patterns
+            ),
+            color=0xFEC
+        )
+        embed.set_thumbnail(url=ctx.bot.user.avatar_url)
+
+        await ctx.send(embed=embed)
+
+    """
+    'Add' commands
+    """
 
     @util.group(name='add', brief='Adds various elements.')
     async def add_group(self, ctx):
         pass
+
+    # Apparently making a staticmethod shits across the resolution of coro-s
+    # ... thanks Guido.
+    # noinspection PyMethodMayBeStatic
+    async def get_invite(self, ctx, *, user: commands.MemberConverter=None):
+        """
+        DM's you the invite to the server. If you mention someone, then they
+        get sent a URL instead of you.
+        """
+        if user is None:
+            user = ctx.author
+        await user.send(f'Add me to your server, please.\n\n{ctx.bot.invite}')
+        util.confirm_operation(ctx)
+
+    # Might be nicer to also have "@botuser invite" as a command if
+    # "@botuser add me" is not intuitive enough for me to remember.
+    add_group.command(name='me', brief='Gets an invite URL.')(get_invite)
+    commands.command(name='invite', brief='Gets an invite URL.')(get_invite)
+
+    # noinspection PyUnresolvedReferences
+    @commands.check(commands.guild_only())
+    @add_group.command(
+        name='commander',
+        brief='Authorizes a user to talk on my behalf.'
+    )
+    async def add_commander(self, ctx, *, commander: commands.MemberConverter):
+        commanders = ctx.bot.commanders.get()
+
+        if commander == ctx.bot.user:
+            raise NameError('I am not going to command _myself_...')
+        elif commander.bot:
+            raise NameError('I am not going to be controlled by a lowlife bot!')
+        elif commander.id in commanders:
+            raise NameError('That name is already in my list. Tough luck.')
+        else:
+            commanders.append(commander.id)
+            # Commit to disk
+            await ctx.bot.commanders.set(commanders)
+            util.confirm_operation(ctx)
+
+    @commands.check(commands.guild_only())
+    @add_group.command(
+        name='emoji',
+        aliases=['emote', 'emoticon', 'reaction', 'react'],
+        brief='Adds a new emoji to my reaction list.'
+    )
+    async def add_emote(self, ctx, *, emote: commands.EmojiConverter):
+        emotes = ctx.bot.loaded_emojis
+        if emote not in emotes:
+            emotes.append(emote)
+            await ctx.bot.set_emoji_list(emotes)
+            util.confirm_operation(ctx)
+        else:
+            raise ValueError(f'Emote already exists in my list. {emote}')
+
+    @add_group.command(
+        name='regex',
+        aliases=['pattern'],
+        brief='Adds a regular expression to Kat. Ask Espy.'
+    )
+    async def add_pattern(self, ctx, *, phrase: str):
+        """Compiles the given regular expression."""
+        regex = re.compile(phrase, flags=re.I)
+        # Will assert that this compiled? Maybe?
+        regex.match('')
+        patterns = ctx.bot.patterns
+        patterns.append(regex)
+        await ctx.bot.set_pattern_list(patterns)
+        util.confirm_operation(ctx)
+
+    @add_group.command(
+        name='word',
+        aliases=['phrase'],
+        brief='Adds a word or phrase to Kat.',
+    )
+    async def add_word(self, ctx, *, phrase: str):
+        """Compiles the given phrase into a regular expression."""
+        # Hacky, but if I put brackets around said phrase... it should make
+        # sure I detect that this is a command added word, then in the list
+        # we don't have to show it in backticks. Hacky work around. Sue me, etc.
+        regex = re.compile('\\b(%s)\\b' % phrase, flags=re.I | re.U | re.M)
+        # Will assert that this compiled? Maybe?
+        patterns = ctx.bot.patterns
+        patterns.append(regex)
+        await ctx.bot.set_pattern_list(patterns)
+        util.confirm_operation(ctx)
+
+    """
+    'Remove' methods.
+    """
 
     @util.group(name='remove', brief='Removes various elements.')
     async def remove_group(self, ctx):

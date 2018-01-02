@@ -1,7 +1,6 @@
 """
 Handles the bot presence, game, etc.
 """
-import asyncio
 import discord
 
 import kat18.util as util

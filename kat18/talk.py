@@ -2,7 +2,10 @@
 Handles talking.
 """
 import asyncio
+import traceback
 import random
+
+import discord
 
 
 def talk_time(msg):
@@ -17,26 +20,31 @@ class Talk:
 
     async def on_message(self, message):
         """Handles replying to users."""
-        expected_prefix = f'{self.bot.name.lower()}:'
 
-        # Return if we don't start with the prefix.
-        if not message.content.lstrip().lower().startswith(expected_prefix):
-            return
+        try:
+            expected_pre = f'{self.bot.name.lower()}:'
 
-        # If the user is unauthorised, reply with an angry face.
-        if message.author.id not in self.bot.commanders:
-            await message.add_reaction('\N{ANGRY FACE}')
-            return
+            # Return if we don't start with the prefix.
+            if not message.content.lstrip().lower().startswith(expected_pre):
+                return
 
-        asyncio.ensure_future(message.delete())
+            # If the user is unauthorised, reply with an angry face.
+            if message.author.id not in self.bot.commanders:
+                await message.add_reaction('\N{ANGRY FACE}')
+                return
+            async with message.channel.typing():
 
-        # Remove the prefix from the message content
-        message.content = message.content[len(expected_prefix):].lstrip()
+                await message.delete()
 
-        async with message.channel.typing():
-            await asyncio.sleep(talk_time(message))
+                # Remove the prefix from the message content
+                message.content = message.content[len(expected_pre):].lstrip()
 
-            await message.channel.send(message.content)
+                await asyncio.sleep(talk_time(message))
+                await message.channel.send(message.content)
+
+        except discord.DiscordException as ex:
+            traceback.print_exc()
+            await message.channel.send(f'`{type(ex).__name__}: {str(ex)}.`')
 
 
 def setup(bot):

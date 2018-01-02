@@ -29,10 +29,22 @@ class KatCommandMixin(abc.ABC):
     message if stuff messes up.
     """
     @staticmethod
-    async def on_error(cog, ctx, error):
+    async def on_error(*args):
+        if len(args) == 2:
+            cog = None
+            ctx, error = args
+        else:
+            cog, ctx, error = args
+
+        if isinstance(error, commands.CheckFailure):
+            msg = ('You don\'t have permission to do this to me! ' 
+                   '\N{face with tears of joy}')
+        else:
+            msg = str(error.__cause__ if error.__cause__ else error)
+
         embed = discord.Embed(
             title='Uh-oh!',
-            description=str(error.__cause__ if error.__cause__ else error),
+            description=msg,
             color=0xFF0000
         )
 
@@ -85,6 +97,7 @@ def confirm_operation(ctx):
     async def coro():
         asyncio.ensure_future(ctx.message.add_reaction('\N{OK HAND SIGN}'))
         await asyncio.sleep(5)
+        # noinspection PyBroadException
         try:
             await ctx.message.delete()
         except BaseException:
