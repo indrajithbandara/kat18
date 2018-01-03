@@ -38,7 +38,7 @@ class KatBot(commands.Bot, util.Loggable):
 
         self.config = config
 
-        super().__init__(command_prefix=commands.when_mentioned,
+        super().__init__(command_prefix=self.when_mentioned,
                          owner_id=config['owner_id'])
 
         self.logger.info(f'Add me to a guild at: {self.invite}')
@@ -155,9 +155,13 @@ class KatBot(commands.Bot, util.Loggable):
         await self._loaded_emojis_raw.set([str(e) for e in value])
         self.logger.info('Emoji list has been changed by a commander. '
                          'Recache time!')
-        asyncio.ensure_future(self.reload_emoji_cache())
-        self.logger.info(f'Finished. I now have '
-                         f'{len(self._loaded_emoji_cache)} emojis')
+
+        async def _reload_and_notify():
+            await self.reload_emoji_cache()
+            self.logger.info(f'Finished. I now have '
+                             f'{len(self.loaded_emojis)} emojis')
+
+        asyncio.ensure_future(_reload_and_notify())
 
     @property
     def patterns(self):
@@ -170,3 +174,11 @@ class KatBot(commands.Bot, util.Loggable):
         patterns = [pattern.pattern for pattern in patterns]
         await self._patterns_raw.set(patterns)
         await self.recompile_patterns()
+
+    async def when_mentioned(self, bot, _):
+        """Handles generating the appropriate command prefix."""
+        return [
+            bot.user.mention + ' ',    # Mention (nick-based)
+            '<@!%s> ' % bot.user.id,   # User-account mention
+            self.name + ' do: '        # "Kat do:"
+        ]

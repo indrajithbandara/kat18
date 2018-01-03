@@ -9,9 +9,11 @@ import copy
 import io
 import json
 import os
+import time
 
 import asyncio
 import traceback
+import typing
 
 
 class AsyncFile:
@@ -48,9 +50,9 @@ class AsyncFile:
         :return: the result of executing the function that was passed.
         """
         with await self._lock:
-            # We ensure to open the file on the same thread we are executing the
-            # function on, as I am unsure if the open() method provides any
-            # kind of thread safety.
+            # We ensure to open the file on the same thread we are
+            # executing the function on, as I am unsure if the open()
+            # method provides any kind of thread safety.
             def do_io(_func, file_name, _mode):
                 # noinspection PyBroadException
                 try:
@@ -58,12 +60,18 @@ class AsyncFile:
                         return _func(fp)
                 except BaseException:
                     traceback.print_exc()
-                    raise ValueError('The JSON value is now '
-                                     'inconsistent and likely corrupted.')
+                    return None
 
             if loop is None:
                 loop = asyncio.get_event_loop()
-            return loop.run_in_executor(None, do_io, func, self.file_name, mode)
+
+            return await loop.run_in_executor(
+                None,
+                do_io,
+                func,
+                self.file_name,
+                mode
+            )
 
 
 class AsyncJsonValue:
@@ -87,15 +95,23 @@ class AsyncJsonValue:
         with open(file_name) as f:
             self.__cached = json.load(f)
 
-    async def __accessor(self):
-        """Accesses the cached values."""
-        return self.__cached
-
     def get(self):
+        """Gets the value."""
         return copy.deepcopy(self.__cached)
 
     async def set(self, value):
+        """Sets the value."""
         self.__cached = await self.__serialize(value)
+
+    def set_blocking(self, value):
+        """Sets the value, but blocks until it is complete."""
+        future: asyncio.Future = asyncio.ensure_future(self.set(value))
+
+        while not future.done():
+            # Sufficient to allow this thread to yield another thread. This
+            # just causes the system to sleep for a little while longer until
+            # the event loop is complete with whatever it is doing.
+            time.sleep(0.001)
 
     @property
     def cached_value(self):
@@ -116,25 +132,24 @@ class AsyncJsonValue:
     def __eq__(self, other):
         return self.get().__eq__(other)
 
-    def read_from_file(self):
-        return self.__deserialize()
-
     async def __serialize(self, value):
-        try:
-            sfp = io.StringIO()
-            json.dump(obj=value, fp=sfp, indent=' ' * 4)
-            # Seek to the start of the stringio fp.
-            sfp.seek(0)
+        """Serializes the given value to the JSON file by overwriting."""
+        sfp = io.StringIO()
+        json.dump(obj=value, fp=sfp, indent=' ' * 4)
+        # Seek to the start of the stringio fp.
+        sfp.seek(0)
 
-            def write(fp):
-                fp.write(sfp.read())
+        def write(fp):
+            fp.write(sfp.read())
 
-            await self.__async_file.execute(func=write, mode='w')
-            return value
-        except:
-            traceback.print_exc()
+        await self.__async_file.execute(func=write, mode='w')
+        return value
 
-    def __deserialize(self):
+    def read_from_file(self) -> typing.Coroutine:
+        """
+        Rereads from the file. This returns a coroutine that must be
+        awaited or ensured as a future.
+        """
         def read(fp):
             return json.load(fp=fp)
         return self.__async_file.execute(func=read, mode='r')

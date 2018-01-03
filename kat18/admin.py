@@ -10,21 +10,43 @@ class Admin:
     """
     Administrative tasks.
     """
+    def __init__(self):
+        # Might be nicer to also have "@botuser get invite" as a command if
+        # "@botuser add me" is not intuitive enough for me to remember.
+        self.add_group.command(
+            name='me',
+            brief='Gets an invite URL.'
+        )(self.add_guild)
+        self.get_group.command(
+            name='invite',
+            brief='Gets an invite URL.'
+        )(self.add_guild)
+
+        self.remove_group.command(
+            name='guild',
+            aliases=['guilds', 'server', 'servers'],
+            brief='Makes me leave a given server.'
+        )(self.remove_guild)
+        commands.command(
+            name='leave',
+            brief='Makes me leave a given server.'
+        )(self.remove_guild)
+
     @staticmethod
     async def __local_check(ctx):
         return (await ctx.bot.is_owner(ctx.author)
                 or ctx.author.id in ctx.bot.commanders)
 
-    @util.group(name='list', brief='Lists various elements.')
-    async def list_group(self, ctx):
+    @util.group(name='get', aliases=['list'], brief='Lists various elements.')
+    async def get_group(self, ctx):
         pass
 
-    @list_group.command(
+    @get_group.command(
         name='commanders',
         aliases=['commander'],
         brief='Lists the current commanders for my bot.'
     )
-    async def list_commanders(self, ctx):
+    async def get_commanders(self, ctx):
         """Lists any commanders authorized to use me."""
         embed = discord.Embed(
             title=f'Authorized commanders for {ctx.bot.user} are',
@@ -46,12 +68,12 @@ class Admin:
         embed.description = '\n'.join(user_strings)
         await ctx.send(embed=embed)
 
-    @list_group.command(
+    @get_group.command(
         name='guilds',
         aliases=['guild', 'server', 'servers'],
         brief='Lists the guilds I am part of.'
     )
-    async def list_guilds(self, ctx):
+    async def get_guilds(self, ctx):
         """Lists all guilds I am currently connected to."""
         embed = discord.Embed(
             title=f'{ctx.bot.user} is currently a member in',
@@ -83,13 +105,13 @@ class Admin:
         await ctx.send(embed=embed)
 
     @commands.check(commands.guild_only())
-    @list_group.command(
+    @get_group.command(
         name='perms',
         aliases=['perm', 'permission', 'permissions'],
         brief='Lists the permissions for this guild that I am granted.',
 
     )
-    async def list_permissions(self, ctx):
+    async def get_permissions(self, ctx):
         """Lists the current permissions the bot has in the current guild."""
 
         perms = ctx.guild.me.guild_permissions
@@ -117,13 +139,13 @@ class Admin:
 
         await ctx.send(embed=embed)
 
-    @list_group.command(
+    @get_group.command(
         name='emojis',
         aliases=['emoji', 'emote', 'emotes', 'emoticon', 'reaction' 
                  'emoticons', 'react', 'reacts', 'reactions'],
         brief='Lists the emojis that I will currently react with.'
     )
-    async def list_emojis(self, ctx):
+    async def get_emojis(self, ctx):
         embed = discord.Embed(
             title=f'My super dank list of emojis to shitpost with',
             color=0xFFAACC
@@ -137,23 +159,23 @@ class Admin:
 
         await ctx.send(embed=embed)
 
-    @list_group.command(
+    @get_group.command(
         name='trigger',
         aliases=['triggers', 'word', 'words', 'regex', 'regexes', 'regexs',
                  'pattern', 'patterns', 'phrase', 'phrases'],
         brief='Lists all phrases/regular expressions I understand.'
     )
-    async def list_phrases(self, ctx):
+    async def get_phrases(self, ctx):
         # noinspection PyProtectedMember
         patterns = []
 
         for pattern in ctx.bot.patterns:
             # Determines if the regex was probably added as a word.
-            match = re.match(r'^\\b\(([^)]+)\)\\b$', pattern.pattern)
+            match = re.match(r'\\b\(([^)]+)\)\\b', pattern.pattern)
             if match:
                 patterns.append(match.group(1))
             else:
-                patterns.append(f'`re/{pattern.pattern}/`')
+                patterns.append(f'`{pattern.pattern}` (regex)')
 
         embed = discord.Embed(
             title=f'Things I react to',
@@ -177,7 +199,7 @@ class Admin:
     # Apparently making a staticmethod shits across the resolution of coro-s
     # ... thanks Guido.
     # noinspection PyMethodMayBeStatic
-    async def get_invite(self, ctx, *, user: commands.MemberConverter=None):
+    async def add_guild(self, ctx, *, user: commands.MemberConverter=None):
         """
         DM's you the invite to the server. If you mention someone, then they
         get sent a URL instead of you.
@@ -186,11 +208,6 @@ class Admin:
             user = ctx.author
         await user.send(f'Add me to your server, please.\n\n{ctx.bot.invite}')
         util.confirm_operation(ctx)
-
-    # Might be nicer to also have "@botuser invite" as a command if
-    # "@botuser add me" is not intuitive enough for me to remember.
-    add_group.command(name='me', brief='Gets an invite URL.')(get_invite)
-    commands.command(name='invite', brief='Gets an invite URL.')(get_invite)
 
     # noinspection PyUnresolvedReferences
     @commands.check(commands.guild_only())
@@ -219,7 +236,7 @@ class Admin:
         aliases=['emote', 'emoticon', 'reaction', 'react'],
         brief='Adds a new emoji to my reaction list.'
     )
-    async def add_emote(self, ctx, *, emote: commands.EmojiConverter):
+    async def add_emoji(self, ctx, *, emote: commands.EmojiConverter):
         emotes = ctx.bot.loaded_emojis
         if emote not in emotes:
             emotes.append(emote)
@@ -267,6 +284,87 @@ class Admin:
     @util.group(name='remove', brief='Removes various elements.')
     async def remove_group(self, ctx):
         pass
+
+    # noinspection PyMethodMayBeStatic
+    async def remove_guild(self, ctx, *, guild):
+        """
+        Removes my user from a given server.
+        """
+        # Try to find the guild.
+        guild_obj = discord.utils.find(
+            lambda g: g.name.lower() == guild.lower() or g.id == guild,
+            ctx.bot.guilds
+        )
+
+        if guild_obj is None:
+            raise ValueError('Could not find a guild with that name or ID.')
+        else:
+            if ctx.guild == guild_obj:
+                # We can't react after we have left.
+                await ctx.message.add_reaction('\N{OK HAND SIGN}')
+                await guild_obj.leave()
+            else:
+                await guild_obj.leave()
+                util.confirm_operation(ctx)
+
+    @remove_group.command(
+        name='commander',
+        aliases=['commanders'],
+        brief='De-authenticates a given commander from using me.'
+    )
+    async def remove_commander(self, ctx, *, member: commands.MemberConverter):
+        """Removes a commander from my authenticated list."""
+        # Don't allow removal of the bot owner.
+        if await ctx.bot.is_owner(member):
+            raise PermissionError('You cannot remove the bot owner.')
+        else:
+            commanders = ctx.bot.commanders.get()
+            commanders.remove(member.id)
+            await ctx.bot.commanders.set(commanders)
+            util.confirm_operation(ctx)
+
+    @remove_group.command(
+        name='regex',
+        aliases=['pattern', 'word', 'phrase'],
+        brief='Removes a given regex or phrase.'
+    )
+    async def remove_pattern(self, ctx, *, pattern):
+        """
+        Removes the given pattern from the list of patterns I react to.
+        """
+        regex = discord.utils.find(
+            lambda r: r.pattern == pattern,
+            ctx.bot.patterns
+        )
+
+        if regex is None:
+            regex = discord.utils.find(
+                lambda r: r.pattern.lower() == f'\\b({pattern.lower()})\\b',
+                ctx.bot.patterns
+            )
+
+        if regex is None:
+            raise ValueError('Could not find that pattern.')
+        else:
+            patterns = ctx.bot.patterns
+            patterns.remove(regex)
+            await ctx.bot.set_pattern_list(patterns)
+            util.confirm_operation(ctx)
+
+    @remove_group.command(
+        name='emoji',
+        aliases=['emote'],
+        brief='Removes an emote from my list of reactions.'
+    )
+    async def remove_emoji(self, ctx, *, emoji: commands.EmojiConverter):
+        """Removes the emoji from my reaction list, if it is there."""
+        emojis = ctx.bot.loaded_emojis
+        if emoji not in emojis:
+            raise ValueError('That emoji is not registered.')
+        else:
+            emojis.remove(emoji)
+            await ctx.bot.set_emoji_list(emojis)
+            util.confirm_operation(ctx)
 
     @util.command(
         name='stop',

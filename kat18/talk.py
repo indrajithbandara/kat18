@@ -33,7 +33,6 @@ class Talk:
                 await message.add_reaction('\N{ANGRY FACE}')
                 return
             async with message.channel.typing():
-
                 await message.delete()
 
                 # Remove the prefix from the message content
