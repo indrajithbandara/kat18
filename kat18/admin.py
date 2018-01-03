@@ -67,6 +67,7 @@ class Admin:
 
         embed.description = '\n'.join(user_strings)
         await ctx.send(embed=embed)
+        util.confirm_operation(ctx)
 
     @get_group.command(
         name='guilds',
@@ -103,6 +104,7 @@ class Admin:
             )
 
         await ctx.send(embed=embed)
+        util.confirm_operation(ctx)
 
     @commands.check(commands.guild_only())
     @get_group.command(
@@ -138,6 +140,7 @@ class Admin:
         )
 
         await ctx.send(embed=embed)
+        util.confirm_operation(ctx)
 
     @get_group.command(
         name='emojis',
@@ -158,6 +161,63 @@ class Admin:
         )
 
         await ctx.send(embed=embed)
+        util.confirm_operation(ctx)
+
+    @get_group.command(
+        name='blacklist',
+        brief='Gets the blacklisted channels to not react in.'
+    )
+    async def get_blacklist(self, ctx):
+        """
+        This blacklist exists to ensure that the bot does not react in
+        inappropriate situations.
+        """
+        blacklist = ctx.bot.dont_react_in.get()
+
+        embed = discord.Embed(
+            title='Channels I am not allowed to react in',
+            description='These are the channels I am not allowed to react to '
+                        'messages in...',
+            color=0xB000B5
+        )
+
+        # Guild is a string. JSON standard says we can't use ints as keys.
+        # Bloody stupid.
+        for guild, channels in blacklist.items():
+            guild_obj = discord.utils.find(
+                lambda g: str(g.id) == guild,
+                ctx.bot.guilds
+            )
+
+            if guild_obj is None:
+                continue
+
+            channel_objs = []
+            for channel in channels:
+                chan_obj = discord.utils.find(
+                    lambda c: c.id == channel,
+                    guild_obj.text_channels
+                )
+
+                if chan_obj is None:
+                    continue
+
+                channel_objs.append(chan_obj)
+
+            embed.add_field(
+                name=guild_obj.name,
+                value='\n'.join(map(lambda c: f'#{c.name}', channel_objs)),
+                inline=False
+            )
+
+        if len(embed.fields) == 0:
+            embed.add_field(
+                name='I am a free bot.',
+                value='Nothing is blacklisted!'
+            )
+
+        await ctx.send(embed=embed)
+        util.confirm_operation(ctx)
 
     @get_group.command(
         name='trigger',
@@ -187,6 +247,8 @@ class Admin:
         embed.set_thumbnail(url=ctx.bot.user.avatar_url)
 
         await ctx.send(embed=embed)
+        util.confirm_operation(ctx)
+
 
     """
     'Add' commands
@@ -263,7 +325,7 @@ class Admin:
     @add_group.command(
         name='word',
         aliases=['phrase'],
-        brief='Adds a word or phrase to Kat.',
+        brief='Adds a word or phrase to the list of things I can react to.',
     )
     async def add_word(self, ctx, *, phrase: str):
         """Compiles the given phrase into a regular expression."""
@@ -275,6 +337,33 @@ class Admin:
         patterns = ctx.bot.patterns
         patterns.append(regex)
         await ctx.bot.set_pattern_list(patterns)
+        util.confirm_operation(ctx)
+
+    @commands.check(commands.guild_only())
+    @add_group.command(
+        name='blacklist',
+        brief='Blacklists a given channel, or if unspecified, __this__ channel.'
+    )
+    async def add_blacklist(self, ctx, *,
+                            channel: commands.TextChannelConverter=None):
+        if channel is None:
+            channel = ctx.channel
+
+        guild_id = str(ctx.guild.id)
+        chan_id = channel.id
+
+        blacklist = ctx.bot.dont_react_in.get()
+
+        if guild_id in blacklist:
+            if chan_id in blacklist[guild_id]:
+                raise ValueError(f'{channel.name} is already blacklisted on '
+                                 'this server.')
+            else:
+                blacklist[guild_id].append(chan_id)
+        else:
+            blacklist[guild_id] = [chan_id]
+
+        await ctx.bot.dont_react_in.set(blacklist)
         util.confirm_operation(ctx)
 
     """
@@ -365,6 +454,34 @@ class Admin:
             emojis.remove(emoji)
             await ctx.bot.set_emoji_list(emojis)
             util.confirm_operation(ctx)
+
+    @commands.check(commands.guild_only())
+    @remove_group.command(
+        name='blacklist',
+        brief='Un-blacklists a given channel, or if unspecified, '
+              '__this__ channel.'
+    )
+    async def remove_blacklist(self, ctx, *,
+                               channel: commands.TextChannelConverter=None):
+        if channel is None:
+            channel = ctx.channel
+
+        guild_id = str(ctx.guild.id)
+        chan_id = channel.id
+
+        blacklist = ctx.bot.dont_react_in.get()
+
+        if guild_id not in blacklist:
+            if chan_id not in blacklist[guild_id]:
+                raise ValueError(f'{channel.name} is not blacklisted on '
+                                 'this server anyway.')
+            else:
+                blacklist[guild_id].remove(chan_id)
+        else:
+            blacklist.pop(guild_id)
+
+        await ctx.bot.dont_react_in.set(blacklist)
+        util.confirm_operation(ctx)
 
     @util.command(
         name='stop',

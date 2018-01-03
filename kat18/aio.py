@@ -5,6 +5,7 @@ safely. The issue is, I don't want to have to write code to interface with
 the files in each cog I need to use it, so I am writing some crappy
 work-around class to implement globally in the class in client.py
 """
+import concurrent.futures as futures
 import copy
 import io
 import json
@@ -14,6 +15,10 @@ import time
 import asyncio
 import traceback
 import typing
+
+
+io_tpe = futures.ThreadPoolExecutor(max_workers=2,
+                                    thread_name_prefix='IO worker')
 
 
 class AsyncFile:
@@ -66,7 +71,7 @@ class AsyncFile:
                 loop = asyncio.get_event_loop()
 
             return await loop.run_in_executor(
-                None,
+                io_tpe,
                 do_io,
                 func,
                 self.file_name,

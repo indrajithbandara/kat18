@@ -40,13 +40,14 @@ class Presence:
         - dnd, do not disturb: Do Not Disturb (red)
         - invisible, offline: Invisible (grey)
         """
+        status = status.strip().lower()
         presence_map = {
             'available': discord.Status.online,
             'online': discord.Status.online,
             'away': discord.Status.idle,
             'idle': discord.Status.idle,
             'dnd': discord.Status.dnd,
-            'do_not_disturb': discord.Status.dnd,
+            'do not disturb': discord.Status.dnd,
             'invisible': discord.Status.invisible,
             'offline': discord.Status.invisible
         }

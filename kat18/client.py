@@ -18,7 +18,9 @@ import kat18.util as util
 extensions = {
     'kat18.talk',
     'kat18.presence',
-    'kat18.admin'
+    'kat18.admin',
+    'kat18.reacting',
+    'kat18.version'
 }
 
 
@@ -88,6 +90,12 @@ class KatBot(commands.Bot, util.Loggable):
         asyncio.wait(asyncio.gather(self.recompile_patterns()))
 
         self._patterns_cache = []
+
+        # Guild channels to not react in.
+        self.dont_react_in = asyncjson.AsyncJsonValue(
+            os.path.join(config_location, 'blacklisted_channels.json'),
+            {}
+        )
 
         # Load the cogs.
         for ext in extensions:
