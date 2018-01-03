@@ -58,7 +58,9 @@ class Admin:
         user_strings = []
 
         for id in ctx.bot.commanders:
-            user = await ctx.bot.get_user_info(id)
+            # Use the cached version or we will be dead before the
+            # command finishes execution.
+            user = await ctx.bot.get_user(id)
 
             if ctx.guild is not None and user in ctx.guild.members:
                 user_strings.append(f'- {user.mention} `{user.id}`')
