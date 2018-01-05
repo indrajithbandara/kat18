@@ -1,3 +1,4 @@
+import random
 import re
 
 import discord
@@ -68,8 +69,9 @@ class Admin:
                 user_strings.append(f'- {user} `{user.id}`')
 
         embed.description = '\n'.join(user_strings)
-        await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed)
         util.confirm_operation(ctx)
+        util.make_closeable(ctx, msg)
 
     @get_group.command(
         name='guilds',
@@ -105,8 +107,9 @@ class Admin:
                 inline=False
             )
 
-        await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed)
         util.confirm_operation(ctx)
+        util.make_closeable(ctx, msg)
 
     @commands.check(commands.guild_only())
     @get_group.command(
@@ -141,8 +144,9 @@ class Admin:
             value=falsey_perms if falsey_perms else 'None'
         )
 
-        await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed)
         util.confirm_operation(ctx)
+        util.make_closeable(ctx, msg)
 
     @get_group.command(
         name='emojis',
@@ -162,8 +166,9 @@ class Admin:
             map(lambda e: f'{str(e)} {e.name} {e.id}', emojis)
         )
 
-        await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed)
         util.confirm_operation(ctx)
+        util.make_closeable(ctx, msg)
 
     @get_group.command(
         name='blacklist',
@@ -218,8 +223,9 @@ class Admin:
                 value='Nothing is blacklisted!'
             )
 
-        await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed)
         util.confirm_operation(ctx)
+        util.make_closeable(ctx, msg)
 
     @get_group.command(
         name='trigger',
@@ -248,8 +254,9 @@ class Admin:
         )
         embed.set_thumbnail(url=ctx.bot.user.avatar_url)
 
-        await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed)
         util.confirm_operation(ctx)
+        util.make_closeable(ctx, msg)
 
 
     """
@@ -491,7 +498,29 @@ class Admin:
         brief='Kills the bot process (Generally causes bot to restart).'
     )
     async def stop(self, ctx):
-        await ctx.message.add_reaction('\N{OK HAND SIGN}')
+        await ctx.send(
+            random.choice([
+                'Yessir!',
+                'Sure.',
+                'Do I really have to?',
+                'Goodbye ;-;',
+                '*cries*...\n\n*sniffle* ...o..okay...',
+                '*deletes the other bots',
+                '*hisses*',
+                '*nods*',
+                'kk',
+                'k',
+                'Sure thing sauce boss.',
+                'Gimme a sec then!',
+                'Okydokes',
+                'Ja.',
+                'PlEaSe ShUtDoWn FoR Me BoT!',
+                'Meh',
+                'You are no fun...',
+                'Soon. Soon you will regret the day you messed with --'
+                '*powers down*'
+            ])
+        )
         await ctx.bot.logout()
 
 

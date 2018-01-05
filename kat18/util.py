@@ -3,10 +3,10 @@ Utility classes and methods.
 """
 
 import abc
+import asyncio
 import logging
 import traceback
 
-import asyncio
 import discord
 import discord.ext.commands as commands
 
@@ -103,3 +103,39 @@ def confirm_operation(ctx):
         except BaseException:
             pass
     asyncio.ensure_future(coro())
+
+
+def make_closeable(ctx, msg):
+    """
+    Adds a reaction to the message and allows the ctx sender
+    to close it. After a timeout the message will self
+    destruct. This is all done as ensured futures so does
+    not and should not be awaited.
+    
+    :param ctx: the original command invocation ctx.
+    :param msg: the message to destroy.
+    """
+    # noInspection PyBroadException
+    try:
+        emote = '\N{REGIONAL INDICATOR SYMBOL LETTER X}'
+        asyncio.ensure_future(msg.add_reaction(emote))
+
+        async def callback():
+            nonlocal emote
+            nonlocal ctx
+            nonlocal msg
+            try:
+                await ctx.bot.wait_for(
+                    'reaction_add',
+                    timeout=60,
+                    check=lambda r, u: u.id == ctx.author.id
+                                       and r.message.id == msg.id
+                                       and r.emoji == emote
+                )
+            except asyncio.TimeoutError:
+                pass
+            finally:
+                asyncio.ensure_future(msg.delete())
+        asyncio.ensure_future(callback())
+    except BaseException:
+        pass
